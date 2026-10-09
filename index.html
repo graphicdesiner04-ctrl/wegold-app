@@ -210,6 +210,10 @@ function flagsOf(s,dm){
   if(c.phone&&(dm||dupMap(s.month))[c.phone]>1)f.push('رقم مكرر');
   return f;
 }
+const plv=v=>'⁦'+(v<0?'−':'')+fmt(Math.abs(v))+'⁩';
+const pll=v=>v<0?'خسارة':'مكسب';
+const plc=v=>v<0?'#d6334a':'#0f9d6a';
+const plcell=v=>`<b style="color:${plc(v)}">${v<0?'🔻':'▲'} ${plv(v)}</b> <span class="muted" style="font-size:11px">${pll(v)}</span>`;
 function stats(m,empId){
   let list=subsOf(m); if(empId)list=list.filter(s=>s.emp===empId);
   const b=list.filter(billable);
@@ -317,12 +321,13 @@ function home(){
   </div>
   <div class="card" style="margin-top:10px"><div class="big-rate"><div class="pct">${pct(st.rate)}</div><div style="flex:1"><b>نسبة التحصيل</b><div class="bar"><i style="width:${Math.min(100,st.rate*100)}%"></i></div></div></div></div>
   <div class="grid g2" style="margin-top:10px">
-    <div class="card kpi gold"><div class="v">${fmt(st.profit)}</div><div class="l">صافي الربح</div><small>المصروفات ${fmt(st.costs)}</small></div>
+    <div class="card kpi ${st.profit<0?'red':'green'}"><div class="v">${plv(st.profit)}</div><div class="l">${st.profit<0?'🔻 خسارة':'✅ مكسب'} هذا الشهر</div><small>المدفوع ${fmt(st.paid)} − مصروفات ${fmt(st.costs)}</small><small>لو اكتمل التحصيل: ${plv(st.exp-st.costs)}</small></div>
     <div class="card kpi" data-a="goreview" style="cursor:pointer"><div class="v" style="color:${review?'#c2570c':'#0f9d6a'}">${review||'✓'}</div><div class="l">تحتاج مراجعة</div></div>
   </div>
   <h2>حسب الموظف</h2>
-  <div class="card"><table class="t"><tr><th>الموظف</th><th>الخطوط</th><th>المشتركون</th><th>المدفوع</th><th>المتبقي</th><th>التحصيل</th><th>الربح</th></tr>
-  ${S.employees.map(e=>{const x=stats(m,e.id);return `<tr><td><b>${esc(e.name)}</b></td><td class="num">${x.lines}</td><td class="num">${x.bill}</td><td class="num">${fmt(x.paid)}</td><td class="num" style="color:${x.out?'var(--red)':'inherit'}">${fmt(x.out)}</td><td class="num">${pct(x.rate)}</td><td class="num"><b>${fmt(x.profit)}</b></td></tr>`}).join('')}
+  <div class="card"><table class="t"><tr><th>الموظف</th><th>الخطوط</th><th>المشتركون</th><th>المدفوع</th><th>المتبقي</th><th>التحصيل</th><th>مكسب / خسارة</th></tr>
+  ${S.employees.map(e=>{const x=stats(m,e.id);return `<tr><td><b>${esc(e.name)}</b></td><td class="num">${x.lines}</td><td class="num">${x.bill}</td><td class="num">${fmt(x.paid)}</td><td class="num" style="color:${x.out?'var(--red)':'inherit'}">${fmt(x.out)}</td><td class="num">${pct(x.rate)}</td><td class="num">${plcell(x.profit)}</td></tr>`}).join('')}
+  <tr style="background:#f6f8fb"><td><b>الإجمالي</b></td><td class="num">${st.lines}</td><td class="num">${st.bill}</td><td class="num">${fmt(st.paid)}</td><td class="num">${fmt(st.out)}</td><td class="num">${pct(st.rate)}</td><td class="num">${plcell(st.profit)}</td></tr>
   </table></div>
   <h2>مقارنة يوم 1 ويوم 16 <span class="muted" style="font-weight:400">(تجديدات شهر ${MONTHS[+m.split('-')[1]-1]} فقط)</span></h2>
   <div class="grid g2">
@@ -402,13 +407,20 @@ function profit(){
     <div class="card kpi"><div class="v">${fmt(st.exp)}</div><div class="l">المطلوب</div><small>${dl(st.exp,pv.exp)} عن الشهر السابق</small></div>
     <div class="card kpi green"><div class="v">${fmt(st.paid)}</div><div class="l">المدفوع</div><small>${dl(st.paid,pv.paid)}</small></div>
     <div class="card kpi red"><div class="v">${fmt(st.costs)}</div><div class="l">المصروفات</div><small>${dl(st.costs,pv.costs,true)}</small></div>
-    <div class="card kpi gold"><div class="v">${fmt(st.profit)}</div><div class="l">صافي الربح</div><small>${dl(st.profit,pv.profit)}</small></div></div>
+    <div class="card kpi ${st.profit<0?'red':'green'}"><div class="v">${plv(st.profit)}</div><div class="l">${st.profit<0?'🔻 خسارة':'✅ مكسب'}</div><small>${dl(st.profit,pv.profit)}</small></div></div>
+  <h2>حساب المكسب والخسارة — ${mlabel(m)}</h2>
+  <div class="card" style="font-size:16px">
+    <div class="row2" style="padding:8px 0"><span>الإيراد المحصّل (المدفوع)</span><b class="num" style="color:var(--green)">+ ${fmt(st.paid)}</b></div>
+    <div class="row2" style="padding:8px 0;border-top:1px solid var(--line)"><span>المصروفات</span><b class="num" style="color:var(--red)">− ${fmt(st.costs)}</b></div>
+    <div class="row2" style="padding:12px 10px;margin-top:6px;border-radius:12px;background:${st.profit<0?'var(--red-bg)':'var(--green-bg)'}"><b>${st.profit<0?'🔻 النتيجة: خسارة':'✅ النتيجة: مكسب'}</b><b class="num" style="font-size:22px;color:${plc(st.profit)}">${plv(st.profit)}</b></div>
+    <div class="muted" style="margin-top:10px">المتبقي لم يُحصَّل بعد: ${fmt(st.out)} — لو تم تحصيله تصبح النتيجة <b style="color:${plc(st.profit+st.out)}">${plv(st.profit+st.out)}</b></div>
+  </div>
   <h2>المصروفات (فواتير الشركة، تسويق…)</h2>
   <div class="card">${exps.length?exps.map(e=>`<div class="row2" style="padding:8px 0;border-bottom:1px solid var(--line)"><div><b>${esc(e.label||'مصروف')}</b><div class="muted">${e.emp?esc((emp(e.emp)||{}).name||''):'عام'}</div></div><div class="row2"><b class="num">${fmt(e.amount)}</b><button class="btn red sm" data-a="delexp" data-v="${e.id}">حذف</button></div></div>`).join(''):'<div class="muted">لا توجد مصروفات مسجّلة لهذا الشهر</div>'}
   <div class="pill-in" style="margin-top:12px"><input id="ex_l" placeholder="البند (مثال: فاتورة WE)"><input id="ex_a" type="number" inputmode="decimal" placeholder="المبلغ" style="max-width:110px"></div>
   <div class="pill-in" style="margin-top:8px"><select id="ex_e" style="flex:1;border:1px solid var(--line);border-radius:12px;padding:11px;background:#f9fafc"><option value="">عام (على الجميع)</option>${S.employees.map(e=>`<option value="${e.id}">${esc(e.name)}</option>`).join('')}</select><button class="btn gold" data-a="addexp">إضافة</button></div></div>
-  <h2>ربح كل موظف</h2>
-  <div class="card"><table class="t"><tr><th>الموظف</th><th>المدفوع</th><th>مصروفاته</th><th>الربح</th></tr>${S.employees.map(e=>{const x=stats(m,e.id);return `<tr><td><b>${esc(e.name)}</b></td><td class="num">${fmt(x.paid)}</td><td class="num">${fmt(x.costs)}</td><td class="num"><b>${fmt(x.profit)}</b></td></tr>`}).join('')}</table>
+  <h2>مكسب / خسارة كل موظف</h2>
+  <div class="card"><table class="t"><tr><th>الموظف</th><th>المدفوع</th><th>مصروفاته</th><th>مكسب / خسارة</th></tr>${S.employees.map(e=>{const x=stats(m,e.id);return `<tr><td><b>${esc(e.name)}</b></td><td class="num">${fmt(x.paid)}</td><td class="num">${fmt(x.costs)}</td><td class="num">${plcell(x.profit)}</td></tr>`}).join('')}</table>
   <div class="muted" style="margin-top:8px">المصروفات «العامة» تظهر في الإجمالي فقط. اربط المصروف بموظف ليظهر في ربحه.</div></div>
   <h2>آخر 6 أشهر (المدفوع)</h2>
   <div class="card"><div class="bars">${vals.map((v,i)=>`<div class="b"><em class="num">${v.paid?fmt(v.paid/1000)+'ك':''}</em><i style="height:${Math.round(v.paid/mx*100)}%"></i>${MONTHS[+months[i].split('-')[1]-1]}</div>`).join('')}</div></div>
@@ -604,9 +616,9 @@ function buildXlsx(){
   const sum=[[{v:(S.company||'إدارة الخطوط')+' — ملخص '+mlabel(m),s:5}],[],
     H(['البند','هذا الشهر','الشهر السابق']),
     ['عدد الخطوط (الأرقام الأساسية)',st.lines,pv.lines],['عدد المشتركين (نشط + جديد)',st.bill,pv.bill],['المشتركون الجدد',st.fresh,pv.fresh],['المتوقفون / المنتهون',st.stopped,pv.stopped],
-    ['المطلوب',st.exp,pv.exp],['المدفوع',st.paid,pv.paid],['المتبقي',st.out,pv.out],['المصروفات',st.costs,pv.costs],['صافي الربح',{v:st.profit,s:6},{v:pv.profit,s:6}],
+    ['المطلوب',st.exp,pv.exp],['المدفوع',st.paid,pv.paid],['المتبقي',st.out,pv.out],['المصروفات',st.costs,pv.costs],[(st.profit<0?'النتيجة: خسارة':'النتيجة: مكسب'),{v:st.profit,s:6},{v:pv.profit,s:6}],
     ['نسبة التحصيل',{v:st.rate,s:4},{v:pv.rate,s:4}],[],
-    [{v:'حسب الموظف',s:3}],H(['الموظف','الخطوط','المشتركون','المطلوب','المدفوع','المتبقي','التحصيل','المصروفات','الربح'])];
+    [{v:'حسب الموظف',s:3}],H(['الموظف','الخطوط','المشتركون','المطلوب','المدفوع','المتبقي','التحصيل','المصروفات','مكسب / خسارة'])];
   S.employees.forEach(e=>{const x=stats(m,e.id);sum.push([e.name,x.lines,x.bill,x.exp,x.paid,x.out,{v:x.rate,s:4},x.costs,x.profit])});
   sum.push([],[{v:'حسب يوم التجديد',s:3}],H(['اليوم','المشتركون','المطلوب','المدفوع','المتبقي']));
   [[1,st.d1],[16,st.d16]].forEach(([d,a])=>sum.push(['يوم '+d,a.length,a.reduce((x,s)=>x+(+s.price||0),0),a.reduce((x,s)=>x+(+s.paid||0),0),a.reduce((x,s)=>x+rem(s),0)]));
@@ -635,10 +647,10 @@ function showReport(){
   <div class="paper">${S.logo?`<img src="${S.logo}" style="height:54px;float:left;margin-right:12px">`:''}<h1>${esc(S.company||'إدارة الخطوط')} — تقرير ${mlabel(m)}</h1>
   <div class="meta">تاريخ التقرير: ${new Date().toLocaleDateString('ar-EG')} · تجديد يوم 1: ${renewDate(m,1)} · تجديد يوم 16: ${renewDate(m,16)}</div>
   <div class="kp"><div><b>${fmt(st.lines)}</b>عدد الخطوط</div><div><b>${fmt(st.bill)}</b>عدد المشتركين${dl(st.bill,pv.bill)}</div><div><b>${fmt(st.exp)}</b>المطلوب${dl(st.exp,pv.exp)}</div><div><b style="color:#0f9d6a">${fmt(st.paid)}</b>المدفوع${dl(st.paid,pv.paid)}</div></div>
-  <div class="kp" style="margin-top:8px"><div><b style="color:#d6334a">${fmt(st.out)}</b>المتبقي</div><div><b>${pct(st.rate)}</b>نسبة التحصيل</div><div><b>${fmt(st.costs)}</b>المصروفات</div><div><b style="color:#a8830f">${fmt(st.profit)}</b>صافي الربح${dl(st.profit,pv.profit)}</div></div>
-  <h4>حسب الموظف</h4><table><thead><tr><th>الموظف</th><th>الخطوط</th><th>المشتركون</th><th>المطلوب</th><th>المدفوع</th><th>المتبقي</th><th>التحصيل</th><th>المصروفات</th><th>الربح</th></tr></thead><tbody>
-  ${S.employees.map(e=>{const x=stats(m,e.id);return row([`<b>${esc(e.name)}</b>`,x.lines,x.bill,fmt(x.exp),fmt(x.paid),fmt(x.out),pct(x.rate),fmt(x.costs),`<b>${fmt(x.profit)}</b>`])}).join('')}</tbody>
-  <tfoot><tr><td>الإجمالي</td><td>${st.lines}</td><td>${st.bill}</td><td>${fmt(st.exp)}</td><td>${fmt(st.paid)}</td><td>${fmt(st.out)}</td><td>${pct(st.rate)}</td><td>${fmt(st.costs)}</td><td>${fmt(st.profit)}</td></tr></tfoot></table>
+  <div class="kp" style="margin-top:8px"><div><b style="color:#d6334a">${fmt(st.out)}</b>المتبقي</div><div><b>${pct(st.rate)}</b>نسبة التحصيل</div><div><b>${fmt(st.costs)}</b>المصروفات</div><div><b style="color:${plc(st.profit)}">${plv(st.profit)}</b>${pll(st.profit)}${dl(st.profit,pv.profit)}</div></div>
+  <h4>حسب الموظف</h4><table><thead><tr><th>الموظف</th><th>الخطوط</th><th>المشتركون</th><th>المطلوب</th><th>المدفوع</th><th>المتبقي</th><th>التحصيل</th><th>المصروفات</th><th>مكسب / خسارة</th></tr></thead><tbody>
+  ${S.employees.map(e=>{const x=stats(m,e.id);return row([`<b>${esc(e.name)}</b>`,x.lines,x.bill,fmt(x.exp),fmt(x.paid),fmt(x.out),pct(x.rate),fmt(x.costs),`<b style="color:${plc(x.profit)}">${plv(x.profit)} ${pll(x.profit)}</b>`])}).join('')}</tbody>
+  <tfoot><tr><td>الإجمالي</td><td>${st.lines}</td><td>${st.bill}</td><td>${fmt(st.exp)}</td><td>${fmt(st.paid)}</td><td>${fmt(st.out)}</td><td>${pct(st.rate)}</td><td>${fmt(st.costs)}</td><td style="color:${plc(st.profit)}">${plv(st.profit)} ${pll(st.profit)}</td></tr></tfoot></table>
   <h4>يوم 1 مقابل يوم 16</h4><table><thead><tr><th>اليوم</th><th>المشتركون</th><th>المطلوب</th><th>المدفوع</th><th>المتبقي</th></tr></thead><tbody>
   ${[[1,st.d1],[16,st.d16]].map(([k,a])=>{const z=d(a);return row(['يوم '+k,z[0],fmt(z[1]),fmt(z[2]),fmt(z[3])])}).join('')}</tbody></table>
   <h4>حالة الدفع</h4><table><thead><tr>${payc.map(x=>`<th>${x[0]}</th>`).join('')}</tr></thead><tbody><tr>${payc.map(x=>`<td>${x[1]}</td>`).join('')}</tr></tbody></table>
