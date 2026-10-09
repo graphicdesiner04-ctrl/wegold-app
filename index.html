@@ -167,7 +167,7 @@ let S=null, UI={tab:'home',filter:'all',q:'',emp:'',payseg:'unpaid',limit:80};
 function uid(){return Math.random().toString(36).slice(2,9)+Date.now().toString(36).slice(-4)}
 function defaultState(){
   return {v:1,company:'',employees:[],packages:DEF_PKGS.map(([p,g])=>({id:uid(),name:p+' جنيه',gb:g,min:1500,price:p,active:true})),
-    customers:{},subs:[],expenses:[],cur:nowMonth(),nextCid:1,lastBackup:0,day16prev:true,onboarded:false};
+    customers:{},subs:[],expenses:[],cur:nowMonth(),nextCid:1,lastBackup:0,onboarded:false};
 }
 function nowMonth(){const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')}
 function load(){
@@ -183,7 +183,7 @@ const fmt=n=>Math.round(+n||0).toLocaleString('en-US');
 const pct=n=>(Math.round((+n||0)*1000)/10)+'%';
 function mlabel(m){const [y,mm]=m.split('-');return MONTHS[+mm-1]+' '+y}
 function addM(m,k){let [y,mm]=m.split('-').map(Number);mm+=k;while(mm>12){mm-=12;y++}while(mm<1){mm+=12;y--}return y+'-'+String(mm).padStart(2,'0')}
-function renewDate(m,day){let [y,mm]=m.split('-').map(Number);let dd=day;if(day===16&&S.day16prev){mm--;if(mm<1){mm=12;y--}}return String(dd).padStart(2,'0')+'/'+String(mm).padStart(2,'0')+'/'+y}
+function renewDate(m,day){const [y,mm]=m.split('-');return String(day).padStart(2,'0')+'/'+mm+'/'+y}
 function esc(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 function toast(t){const e=document.createElement('div');e.className='toast';e.textContent=t;document.body.appendChild(e);setTimeout(()=>e.remove(),2200)}
 function normPhone(v){
@@ -281,7 +281,8 @@ function onboard(){
 }
 function home(){
   const m=S.cur, st=stats(m), subs=subsOf(m);
-  const bn=backupBanner();
+  const pend=pendingFromPrev(m);
+  const bn=backupBanner()+(subs.length&&pend.length?`<div class="banner"><span>🔁 يوجد ${pend.length} مشترك من ${mlabel(addM(m,-1))} (${[...new Set(pend.map(s=>'يوم '+s.day))].join(' و')}) لم يُنقلوا إلى ${mlabel(m)} بعد</span><button class="btn sm gold" data-a="newmonth">نقلهم</button></div>`:'');
   if(!subs.length){
     const prev=subsOf(addM(m,-1)).filter(billable).length;
     return bn+`<div class="card empty"><div class="big">🗓️</div><b>لا يوجد مشتركون في ${mlabel(m)}</b><p class="muted">${prev?`يوجد ${prev} مشترك نشط في الشهر السابق يمكن نقلهم بضغطة واحدة`:'ابدأ بإضافة أول خط'}</p>
@@ -310,7 +311,7 @@ function home(){
   <div class="card"><table class="t"><tr><th>الموظف</th><th>الخطوط</th><th>المشتركون</th><th>المدفوع</th><th>المتبقي</th><th>التحصيل</th><th>الربح</th></tr>
   ${S.employees.map(e=>{const x=stats(m,e.id);return `<tr><td><b>${esc(e.name)}</b></td><td class="num">${x.lines}</td><td class="num">${x.bill}</td><td class="num">${fmt(x.paid)}</td><td class="num" style="color:${x.out?'var(--red)':'inherit'}">${fmt(x.out)}</td><td class="num">${pct(x.rate)}</td><td class="num"><b>${fmt(x.profit)}</b></td></tr>`}).join('')}
   </table></div>
-  <h2>مقارنة يوم 1 ويوم 16</h2>
+  <h2>مقارنة يوم 1 ويوم 16 <span class="muted" style="font-weight:400">(تجديدات شهر ${MONTHS[+m.split('-')[1]-1]} فقط)</span></h2>
   <div class="grid g2">
     ${[[1,D1],[16,D16]].map(([dd,x])=>`<div class="card"><div class="row2"><b>يوم ${dd}</b><span class="muted">${renewDate(m,dd)}</span></div>
       <div style="font-size:26px;font-weight:800;color:var(--navy);margin:6px 0">${x.n} <span class="muted" style="font-size:13px;font-weight:500">مشترك</span></div>
@@ -325,6 +326,10 @@ function home(){
     <div class="card kpi" data-a="gopay" data-v="partial" style="cursor:pointer"><div class="v" style="color:var(--orange)">${par}</div><div class="l">دفع جزئي</div></div>
     <div class="card kpi" data-a="gonew" style="cursor:pointer"><div class="v" style="color:var(--blue)">${st.fresh}</div><div class="l">مشتركون جدد</div></div>
   </div>`;
+}
+function pendingFromPrev(m){
+  const have=new Set(subsOf(m).map(s=>s.cid+'|'+s.day));
+  return subsOf(addM(m,-1)).filter(billable).filter(s=>!have.has(s.cid+'|'+s.day));
 }
 function backupBanner(){
   if(!S.subs.length)return '';
@@ -400,7 +405,7 @@ function settings(){
   const used=id=>S.subs.some(s=>s.emp===id);
   return `<h2>بيانات النشاط</h2><div class="card"><div class="field"><label>اسم النشاط / الشركة (يظهر أعلى الصفحة وفي التقارير)</label><input id="s_co" value="${esc(S.company)}"></div>
   <div class="field"><label>شعار الشركة</label><div class="pill-in" style="align-items:center">${S.logo?`<img class="logo" style="width:56px;height:56px;border:1px solid var(--line)" src="${S.logo}">`:'<span class="muted">لا يوجد شعار</span>'}<button class="btn ghost sm" data-a="pickLogo">${S.logo?'تغيير':'رفع شعار'}</button>${S.logo?'<button class="btn red sm" data-a="rmLogo">حذف</button>':''}</div><input type="file" id="logo_in" accept="image/*" class="hide"></div>
-  <label style="display:flex;gap:10px;align-items:center"><input type="checkbox" id="s_d16" ${S.day16prev?'checked':''} style="width:22px;height:22px"> تجديد يوم 16 يخص الشهر السابق (مثال: دورة أكتوبر = 16 سبتمبر + 1 أكتوبر)</label></div>
+</div>
   <h2>الموظفون</h2><div class="card">${S.employees.map(e=>`<div class="pill-in" style="margin-bottom:8px"><input data-emp="${e.id}" value="${esc(e.name)}"><button class="btn red sm" data-a="delemp" data-v="${e.id}" ${used(e.id)?'disabled style="opacity:.4" title="مستخدم في خطوط"':''}>حذف</button></div>`).join('')}
   <div class="pill-in"><input id="new_emp" placeholder="اسم موظف جديد"><button class="btn gold" data-a="addemp">إضافة</button></div></div>
   <h2>الباقات</h2><div class="card"><div class="setrow muted"><span>الاسم</span><span>جيجا</span><span>دقائق</span><span>السعر</span><span></span></div>
@@ -463,14 +468,14 @@ function monthPicker(){
   <div style="height:10px"></div><button class="btn ghost block" data-a="close">إغلاق</button>`);
 }
 function newMonth(){
-  const m=S.cur, prev=addM(m,-1), src=subsOf(prev).filter(billable);
-  if(!src.length){toast('لا يوجد مشتركون نشطون في الشهر السابق');return}
-  const have=new Set(subsOf(m).map(s=>s.cid));
-  const add=src.filter(s=>!have.has(s.cid));
-  const stopped=subsOf(prev).length-src.length;
-  if(!confirm(`سيتم نقل ${add.length} مشترك نشط من ${mlabel(prev)} إلى ${mlabel(m)} بحالة «لم يتم الدفع».\n${stopped?`(${stopped} مشترك متوقف/منتهي لن يُنقل ويبقى في السجل)\n`:''}متابعة؟`))return;
+  const m=S.cur, prev=addM(m,-1);
+  const add=pendingFromPrev(m);
+  if(!add.length){toast('لا يوجد مشتركون جدد للنقل من الشهر السابق');return}
+  const d1=add.filter(s=>s.day===1).length,d16=add.filter(s=>s.day===16).length;
+  const stopped=subsOf(prev).filter(s=>!billable(s)).length;
+  if(!confirm(`سيتم نقل ${add.length} مشترك نشط من ${mlabel(prev)} إلى ${mlabel(m)} (يوم 1: ${d1} · يوم 16: ${d16}) بحالة «لم يتم الدفع».\n${stopped?`(${stopped} مشترك متوقف/منتهي لن يُنقل ويبقى في السجل)\n`:''}متابعة؟`))return;
   add.forEach(s=>{const p=pkg(s.pkg);S.subs.push({id:uid(),cid:s.cid,month:m,emp:s.emp,day:s.day,pkg:s.pkg,price:p?p.price:s.price,status:'نشط',pay:'لم يتم',paid:0,main:s.main,notes:s.notes})});
-  save();render();toast(`تم تجهيز ${mlabel(m)} ✓`);
+  save();render();toast(`تم نقل ${add.length} مشترك إلى ${mlabel(m)} ✓`);
 }
 function csv(){
   const rows=[['الشهر','الكود','الاسم','الرقم','الموظف','اليوم','الباقة','السعر','حالة الخط','حالة الدفع','المدفوع','المتبقي','الرقم الأساسي','ملاحظات']];
@@ -537,7 +542,6 @@ document.addEventListener('change',e=>{
   const t=e.target;
   if(t.id==='empf'){UI.emp=t.value;render();return}
   if(t.id==='s_co'){S.company=t.value.trim();save();render();return}
-  if(t.id==='s_d16'){S.day16prev=t.checked;save();toast('تم');return}
   if(t.dataset.emp){const e2=emp(t.dataset.emp);e2.name=t.value.trim()||e2.name;save();return}
   const row=t.closest('[data-pk]');
   if(row){const p=pkg(row.dataset.pk),f=t.dataset.f;if(f==='name')p.name=t.value;else{const old=p[f];p[f]=+t.value||0;
