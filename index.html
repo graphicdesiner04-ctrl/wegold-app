@@ -25,7 +25,9 @@ button,input,select,textarea{font-family:inherit;font-size:16px;color:inherit}
 .app{max-width:960px;margin:0 auto}
 header.top{position:sticky;top:0;z-index:20;background:linear-gradient(135deg,var(--navy),var(--navy2));color:#fff;padding:calc(10px + env(safe-area-inset-top)) 16px 12px;box-shadow:0 3px 12px rgba(0,0,0,.18)}
 .top .row{display:flex;align-items:center;justify-content:space-between;gap:10px}
-.brand{font-weight:800;font-size:16px;line-height:1.3;max-width:46%;overflow:hidden;text-overflow:ellipsis}
+.brandrow{display:flex;align-items:center;gap:10px;min-width:0;max-width:48%}
+.logo{width:42px;height:42px;border-radius:10px;object-fit:contain;background:#fff;padding:2px;flex:none}
+.brand{font-weight:800;font-size:16px;line-height:1.3;overflow:hidden;text-overflow:ellipsis}
 .brand small{display:block;font-weight:500;font-size:12px;opacity:.75}
 .monthbar{display:flex;align-items:center;gap:6px;background:rgba(255,255,255,.12);border-radius:14px;padding:4px}
 .monthbar button{background:transparent;border:0;color:#fff;font-size:20px;width:38px;height:38px;border-radius:10px;cursor:pointer}
@@ -224,7 +226,7 @@ function render(){
   const tabs=[['home','🏠','الرئيسية'],['lines','📋','الخطوط'],['pay','💰','المدفوعات'],['profit','📊','الأرباح'],['set','⚙️','الإعدادات']];
   app.innerHTML=`
   <header class="top"><div class="row">
-    <div class="brand">${esc(S.company||'إدارة الخطوط')}<small>نظام إدارة الاشتراكات</small></div>
+    <div class="brandrow">${S.logo?`<img class="logo" src="${S.logo}" alt="">`:''}<div class="brand">${esc(S.company||'إدارة الخطوط')}<small>نظام إدارة الاشتراكات</small></div></div>
     <div class="monthbar"><button data-a="mprev" aria-label="الشهر السابق">›</button><div class="m" data-a="mpick">${mlabel(S.cur)}<small>اضغط لاختيار شهر</small></div><button data-a="mnext" aria-label="الشهر التالي">‹</button></div>
   </div></header>
   <main>${UI.tab==='home'?home():UI.tab==='lines'?lines():UI.tab==='pay'?payments():UI.tab==='profit'?profit():settings()}</main>
@@ -232,7 +234,7 @@ function render(){
   <nav class="tabs">${tabs.map(t=>`<button class="${UI.tab===t[0]?'on':''}" data-a="tab" data-v="${t[0]}"><span>${t[1]}</span>${t[2]}</button>`).join('')}</nav>`;
 }
 function hpin(p){let h=5381;const t='wg|'+p;for(let i=0;i<t.length;i++)h=((h<<5)+h+t.charCodeAt(i))>>>0;return String(h)}
-function lockScreen(){return `<div class="lockscr"><div style="font-size:54px">🔒</div><h2 style="margin:6px 0">${esc(S.company||'إدارة الخطوط')}</h2><p class="muted">أدخل الرقم السري للدخول والتعديل</p>
+function lockScreen(){return `<div class="lockscr">${S.logo?`<img class="logo" style="width:84px;height:84px" src="${S.logo}">`:'<div style="font-size:54px">🔒</div>'}<h2 style="margin:6px 0">${esc(S.company||'إدارة الخطوط')}</h2><p class="muted">أدخل الرقم السري للدخول والتعديل</p>
 <input id="pin_in" type="password" inputmode="numeric" maxlength="8" autocomplete="off"><button class="btn gold block" data-a="unlock">دخول</button></div>`}
 function onboard(){
   return `<div class="onboard"><div class="card">
@@ -362,7 +364,8 @@ function profit(){
 }
 function settings(){
   const used=id=>S.subs.some(s=>s.emp===id);
-  return `<h2>بيانات النشاط</h2><div class="card"><div class="field"><label>اسم النشاط (يظهر أعلى الصفحة)</label><input id="s_co" value="${esc(S.company)}"></div>
+  return `<h2>بيانات النشاط</h2><div class="card"><div class="field"><label>اسم النشاط / الشركة (يظهر أعلى الصفحة وفي التقارير)</label><input id="s_co" value="${esc(S.company)}"></div>
+  <div class="field"><label>شعار الشركة</label><div class="pill-in" style="align-items:center">${S.logo?`<img class="logo" style="width:56px;height:56px;border:1px solid var(--line)" src="${S.logo}">`:'<span class="muted">لا يوجد شعار</span>'}<button class="btn ghost sm" data-a="pickLogo">${S.logo?'تغيير':'رفع شعار'}</button>${S.logo?'<button class="btn red sm" data-a="rmLogo">حذف</button>':''}</div><input type="file" id="logo_in" accept="image/*" class="hide"></div>
   <label style="display:flex;gap:10px;align-items:center"><input type="checkbox" id="s_d16" ${S.day16prev?'checked':''} style="width:22px;height:22px"> تجديد يوم 16 يخص الشهر السابق (مثال: دورة أكتوبر = 16 سبتمبر + 1 أكتوبر)</label></div>
   <h2>الموظفون</h2><div class="card">${S.employees.map(e=>`<div class="pill-in" style="margin-bottom:8px"><input data-emp="${e.id}" value="${esc(e.name)}"><button class="btn red sm" data-a="delemp" data-v="${e.id}" ${used(e.id)?'disabled style="opacity:.4" title="مستخدم في خطوط"':''}>حذف</button></div>`).join('')}
   <div class="pill-in"><input id="new_emp" placeholder="اسم موظف جديد"><button class="btn gold" data-a="addemp">إضافة</button></div></div>
@@ -470,6 +473,8 @@ document.addEventListener('click',e=>{
     case 'addexp':{const l=$('#ex_l').value.trim(),n=+$('#ex_a').value;if(!n){toast('أدخل المبلغ');break}S.expenses.push({id:uid(),month:S.cur,label:l,amount:n,emp:$('#ex_e').value});save();render();break}
     case 'delexp':S.expenses=S.expenses.filter(x=>x.id!==v);save();render();break;
     case 'csv':csv();break;
+    case 'pickLogo':$('#logo_in').click();break;
+    case 'rmLogo':delete S.logo;save();render();break;
     case 'xlsx':exportXlsx();break;
     case 'pdf':showReport();break;
     case 'printnow':window.print();break;
@@ -502,6 +507,7 @@ document.addEventListener('change',e=>{
   if(row){const p=pkg(row.dataset.pk),f=t.dataset.f;if(f==='name')p.name=t.value;else{const old=p[f];p[f]=+t.value||0;
     if(f==='price'&&old!==p[f]){const n=subsOf(S.cur).filter(s=>s.pkg===p.id&&s.pay!=='تم').length;if(n&&confirm(`تطبيق السعر الجديد على ${n} خط في ${mlabel(S.cur)} (غير المدفوعين)؟`))subsOf(S.cur).filter(s=>s.pkg===p.id&&s.pay!=='تم').forEach(s=>s.price=p.price)}}
     save();return}
+  if(t.id==='logo_in'&&t.files[0]){const fr=new FileReader();fr.onload=()=>{const im=new Image();im.onload=()=>{const k=Math.min(1,320/Math.max(im.width,im.height));const c=document.createElement('canvas');c.width=Math.round(im.width*k);c.height=Math.round(im.height*k);c.getContext('2d').drawImage(im,0,0,c.width,c.height);S.logo=c.toDataURL('image/png');save();render();toast('تم رفع الشعار ✓')};im.onerror=()=>toast('ملف الصورة غير صالح');im.src=fr.result};fr.readAsDataURL(t.files[0]);return}
   if(t.id==='rf'&&t.files[0]){const r=new FileReader();r.onload=()=>{try{const d=JSON.parse(r.result);if(!d.subs||!d.employees)throw 0;if(confirm('سيتم استبدال كل البيانات الحالية بالنسخة المختارة. متابعة؟')){S=d;save();render();toast('تم الاسترجاع ✓')}}catch(x){toast('ملف غير صالح')}};r.readAsText(t.files[0])}
 });
 /* ======================= تصدير Excel (.xlsx حقيقي بدون مكتبات) ======================= */
@@ -573,7 +579,7 @@ function showReport(){
   const payc=['تم','جزئي','لم يتم','معلّق','متأخر'].map(p=>[p,subs.filter(s=>billable(s)&&s.pay===p).length]);
   const el=$('#report');
   el.innerHTML=`<div class="bar2"><button class="btn gold" data-a="printnow">🖨️ طباعة / حفظ PDF</button><button class="btn ghost" data-a="closereport">إغلاق</button></div>
-  <div class="paper"><h1>${esc(S.company||'إدارة الخطوط')} — تقرير ${mlabel(m)}</h1>
+  <div class="paper">${S.logo?`<img src="${S.logo}" style="height:54px;float:left;margin-right:12px">`:''}<h1>${esc(S.company||'إدارة الخطوط')} — تقرير ${mlabel(m)}</h1>
   <div class="meta">تاريخ التقرير: ${new Date().toLocaleDateString('ar-EG')} · تجديد يوم 1: ${renewDate(m,1)} · تجديد يوم 16: ${renewDate(m,16)}</div>
   <div class="kp"><div><b>${fmt(st.bill)}</b>الخطوط${dl(st.bill,pv.bill)}</div><div><b>${fmt(st.exp)}</b>المطلوب${dl(st.exp,pv.exp)}</div><div><b style="color:#0f9d6a">${fmt(st.paid)}</b>المدفوع${dl(st.paid,pv.paid)}</div><div><b style="color:#d6334a">${fmt(st.out)}</b>المتبقي</div></div>
   <div class="kp" style="margin-top:8px"><div><b>${pct(st.rate)}</b>نسبة التحصيل</div><div><b>${fmt(st.costs)}</b>المصروفات</div><div><b style="color:#a8830f">${fmt(st.profit)}</b>صافي الربح${dl(st.profit,pv.profit)}</div><div><b>${st.fresh}</b>مشتركون جدد</div></div>
