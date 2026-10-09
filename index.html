@@ -226,7 +226,18 @@ function stats(m,empId){
     rate:exp?paid/exp:0,d1:b.filter(s=>s.day===1),d16:b.filter(s=>s.day===16)};
 }
 /* ======================= الواجهة ======================= */
+const DEF_CATS=['فاتورة الشركة','تسويق','رواتب','إيجار','مواصلات','كهرباء وإنترنت','أخرى'];
+function normalize(){
+  if(!S)return;
+  if(!S.expCats)S.expCats=DEF_CATS.slice();
+  ['فاتورة الشركة','تسويق','أخرى'].forEach(c=>{if(!S.expCats.includes(c))S.expCats.push(c)});
+  (S.expenses||[]).forEach(e=>{
+    if(!e.cat){const l=e.label||'';e.cat=/WE|فاتورة/.test(l)?'فاتورة الشركة':/تسويق/.test(l)?'تسويق':'أخرى'}
+    if(e.date===undefined)e.date='';if(e.note===undefined)e.note='';
+  });
+}
 function render(){
+  normalize();
   const app=$('#app');
   if(!S||(S.auth&&!UI.unlocked)){app.innerHTML=loginScreen();return}
   if(S.pin&&!UI.unlocked){app.innerHTML=lockScreen();return}
@@ -398,6 +409,31 @@ function payments(){
     <div class="row2" data-a="edit" data-v="${s.id}" style="cursor:pointer"><div><b>${esc(c.name||'بدون اسم')}</b><div class="muted num">${esc(c.phone||'—')} · ${esc((emp(s.emp)||{}).name||'')}</div></div><div style="text-align:left">${payChip(s)}<div class="num"><b>${fmt(s.price)}</b>${rem(s)?` <span style="color:var(--red);font-size:13px">متبقي ${fmt(rem(s))}</span>`:''}</div></div></div>
     <div class="actions" style="margin-top:10px"><button class="btn green sm" data-a="paid" data-v="${s.id}">✓ تم الدفع</button><button class="btn ghost sm" data-a="partial" data-v="${s.id}">جزئي…</button>${c.phone?`<a class="btn ghost sm" style="text-decoration:none;text-align:center" href="tel:${c.phone}">📞</a>`:''}</div></div>`}).join(''):`<div class="empty"><div class="big">🎉</div>لا توجد عناصر هنا</div>`}`;
 }
+function expTotals(m){const t={};S.expenses.filter(e=>e.month===m).forEach(e=>{t[e.cat]=(t[e.cat]||0)+(+e.amount||0)});return t}
+function expensesHTML(m){
+  const list=S.expenses.filter(e=>e.month===m).sort((a,b)=>(a.date||'9').localeCompare(b.date||'9')||String(a.id).localeCompare(String(b.id)));
+  const tot=list.reduce((a,e)=>a+(+e.amount||0),0), by=expTotals(m), cats=Object.keys(by).sort((a,b)=>by[b]-by[a]);
+  const prevN=S.expenses.filter(e=>e.month===addM(m,-1)).length;
+  const shortDate=d=>d?d.split('-').reverse().join('/'):'';
+  return `<div class="card">
+  <div class="row2" style="margin-bottom:10px"><div><div class="muted">إجمالي المصروفات</div><div class="num" style="font-size:26px;font-weight:800;color:var(--red)">${fmt(tot)}</div></div><div class="muted">${list.length} بند</div></div>
+  ${cats.length?`<div style="margin-bottom:12px">${cats.map(c=>`<div style="margin:7px 0"><div class="row2" style="font-size:14px"><span>${esc(c)}</span><span class="num"><b>${fmt(by[c])}</b> <span class="muted">${pct(by[c]/tot)}</span></span></div><div class="bar" style="height:8px;margin-top:3px"><i style="width:${by[c]/tot*100}%;background:linear-gradient(90deg,#f59e0b,#d6334a)"></i></div></div>`).join('')}</div>`:''}
+  ${list.length?list.map(e=>`<div class="row2" data-a="editexp" data-v="${e.id}" style="padding:10px 0;border-top:1px solid var(--line);cursor:pointer;align-items:flex-start"><div style="min-width:0"><b>${esc(e.label||e.cat)}</b><div class="sub" style="font-size:12.5px;color:var(--muted);display:flex;gap:6px;flex-wrap:wrap;margin-top:3px"><span class="chip c-gold">${esc(e.cat)}</span><span>${e.emp?esc((emp(e.emp)||{}).name||''):'عام'}</span>${e.date?`<span>${shortDate(e.date)}</span>`:''}${e.note?`<span>📝 ${esc(e.note)}</span>`:''}</div></div><b class="num" style="color:var(--red);white-space:nowrap">${fmt(e.amount)}</b></div>`).join(''):'<div class="muted" style="padding:6px 0">لا توجد مصروفات مسجّلة لهذا الشهر</div>'}
+  <div class="grid g2" style="margin-top:12px"><button class="btn gold" data-a="addexp">＋ إضافة مصروف</button><button class="btn ghost" data-a="copyexp" ${prevN?'':'disabled style="opacity:.5"'}>نسخ من الشهر السابق (${prevN})</button></div>
+  <div class="muted" style="margin-top:8px">اضغط على أي بند لتعديله أو حذفه. المصروف «العام» يُخصم من الإجمالي، والمرتبط بموظف يُخصم من ربحه أيضًا.</div></div>`;
+}
+function expSheet(id){
+  const e=id?S.expenses.find(x=>x.id===id):{cat:S.expCats[0],label:'',amount:'',date:'',emp:'',note:''};
+  const today=new Date().toISOString().slice(0,10); const dflt=e.date||(today.slice(0,7)===S.cur?today:S.cur+'-01');
+  sheet(`<h3>${id?'تعديل مصروف':'إضافة مصروف'} <span class="muted" style="font-size:13px">${mlabel(S.cur)}</span></h3>
+  <div class="field"><label>التصنيف</label><select id="x_cat">${S.expCats.map(c=>`<option ${e.cat===c?'selected':''}>${esc(c)}</option>`).join('')}</select></div>
+  <div class="field"><label>البند / الوصف (اختياري)</label><input id="x_label" value="${esc(e.label)}" placeholder="مثال: فاتورة شهر ${MONTHS[+S.cur.split('-')[1]-1]}"></div>
+  <div class="two"><div class="field"><label>المبلغ</label><input id="x_amt" type="number" inputmode="decimal" value="${e.amount}"></div>
+  <div class="field"><label>التاريخ</label><input id="x_date" type="date" value="${dflt}"></div></div>
+  <div class="field"><label>يخص</label><select id="x_emp"><option value="">عام (على الجميع)</option>${S.employees.map(p=>`<option value="${p.id}" ${e.emp===p.id?'selected':''}>${esc(p.name)}</option>`).join('')}</select></div>
+  <div class="field"><label>ملاحظة</label><textarea id="x_note" rows="2">${esc(e.note)}</textarea></div>
+  <div class="actions"><button class="btn gold" data-a="saveexp" data-v="${id||''}">حفظ</button>${id?`<button class="btn red" data-a="delexp" data-v="${id}" style="flex:.5">حذف</button>`:''}<button class="btn ghost" data-a="close" style="flex:.6">إلغاء</button></div>`);
+}
 function profit(){
   const m=S.cur, st=stats(m), pv=stats(addM(m,-1));
   const dl=(a,b,inv)=>{if(!b)return '<span class="muted">—</span>';const d=(a-b)/b;const good=inv?d<=0:d>=0;return `<span class="delta ${good?'up':'down'}">${d>=0?'▲':'▼'} ${pct(Math.abs(d))}</span>`};
@@ -415,10 +451,8 @@ function profit(){
     <div class="row2" style="padding:12px 10px;margin-top:6px;border-radius:12px;background:${st.profit<0?'var(--red-bg)':'var(--green-bg)'}"><b>${st.profit<0?'🔻 النتيجة: خسارة':'✅ النتيجة: مكسب'}</b><b class="num" style="font-size:22px;color:${plc(st.profit)}">${plv(st.profit)}</b></div>
     <div class="muted" style="margin-top:10px">المتبقي لم يُحصَّل بعد: ${fmt(st.out)} — لو تم تحصيله تصبح النتيجة <b style="color:${plc(st.profit+st.out)}">${plv(st.profit+st.out)}</b></div>
   </div>
-  <h2>المصروفات (فواتير الشركة، تسويق…)</h2>
-  <div class="card">${exps.length?exps.map(e=>`<div class="row2" style="padding:8px 0;border-bottom:1px solid var(--line)"><div><b>${esc(e.label||'مصروف')}</b><div class="muted">${e.emp?esc((emp(e.emp)||{}).name||''):'عام'}</div></div><div class="row2"><b class="num">${fmt(e.amount)}</b><button class="btn red sm" data-a="delexp" data-v="${e.id}">حذف</button></div></div>`).join(''):'<div class="muted">لا توجد مصروفات مسجّلة لهذا الشهر</div>'}
-  <div class="pill-in" style="margin-top:12px"><input id="ex_l" placeholder="البند (مثال: فاتورة WE)"><input id="ex_a" type="number" inputmode="decimal" placeholder="المبلغ" style="max-width:110px"></div>
-  <div class="pill-in" style="margin-top:8px"><select id="ex_e" style="flex:1;border:1px solid var(--line);border-radius:12px;padding:11px;background:#f9fafc"><option value="">عام (على الجميع)</option>${S.employees.map(e=>`<option value="${e.id}">${esc(e.name)}</option>`).join('')}</select><button class="btn gold" data-a="addexp">إضافة</button></div></div>
+  <h2>المصروفات التفصيلية — ${mlabel(m)}</h2>
+  ${expensesHTML(m)}
   <h2>مكسب / خسارة كل موظف</h2>
   <div class="card"><table class="t"><tr><th>الموظف</th><th>المدفوع</th><th>مصروفاته</th><th>مكسب / خسارة</th></tr>${S.employees.map(e=>{const x=stats(m,e.id);return `<tr><td><b>${esc(e.name)}</b></td><td class="num">${fmt(x.paid)}</td><td class="num">${fmt(x.costs)}</td><td class="num">${plcell(x.profit)}</td></tr>`}).join('')}</table>
   <div class="muted" style="margin-top:8px">المصروفات «العامة» تظهر في الإجمالي فقط. اربط المصروف بموظف ليظهر في ربحه.</div></div>
@@ -433,6 +467,8 @@ function settings(){
 </div>
   <h2>الموظفون</h2><div class="card">${S.employees.map(e=>`<div class="pill-in" style="margin-bottom:8px"><input data-emp="${e.id}" value="${esc(e.name)}"><button class="btn red sm" data-a="delemp" data-v="${e.id}" ${used(e.id)?'disabled style="opacity:.4" title="مستخدم في خطوط"':''}>حذف</button></div>`).join('')}
   <div class="pill-in"><input id="new_emp" placeholder="اسم موظف جديد"><button class="btn gold" data-a="addemp">إضافة</button></div></div>
+  <h2>تصنيفات المصروفات</h2><div class="card">${S.expCats.map(c=>{const used=S.expenses.some(e=>e.cat===c)||['فاتورة الشركة','تسويق','أخرى'].includes(c);return `<div class="pill-in" style="margin-bottom:8px"><input value="${esc(c)}" disabled><button class="btn red sm" data-a="delcat" data-v="${esc(c)}" ${used?'disabled style="opacity:.35"':''}>حذف</button></div>`}).join('')}
+  <div class="pill-in"><input id="new_cat" placeholder="تصنيف جديد (مثال: صيانة)"><button class="btn gold" data-a="addcat">إضافة</button></div></div>
   <h2>الباقات</h2><div class="card"><div class="setrow muted"><span>الاسم</span><span>جيجا</span><span>دقائق</span><span>السعر</span><span></span></div>
   ${S.packages.map(p=>`<div class="setrow" data-pk="${p.id}"><input data-f="name" value="${esc(p.name)}"><input data-f="gb" type="number" value="${p.gb}"><input data-f="min" type="number" value="${p.min}"><input data-f="price" type="number" value="${p.price}"><button class="btn sm ${p.active?'ghost':'red'}" data-a="togpkg" data-v="${p.id}">${p.active?'نشطة':'موقوفة'}</button></div>`).join('')}
   <button class="btn ghost block" data-a="addpkg">+ باقة جديدة</button>
@@ -534,8 +570,21 @@ document.addEventListener('click',e=>{
     case 'gonew':UI.tab='lines';UI.filter='new';render();break;
     case 'goreview':UI.tab='lines';UI.filter='review';render();break;
     case 'newmonth':newMonth();break;
-    case 'addexp':{const l=$('#ex_l').value.trim(),n=+$('#ex_a').value;if(!n){toast('أدخل المبلغ');break}S.expenses.push({id:uid(),month:S.cur,label:l,amount:n,emp:$('#ex_e').value});save();render();break}
-    case 'delexp':S.expenses=S.expenses.filter(x=>x.id!==v);save();render();break;
+    case 'addexp':expSheet();break;
+    case 'editexp':expSheet(v);break;
+    case 'saveexp':{const n=+$('#x_amt').value;if(!n){toast('أدخل المبلغ');break}
+      const rec={cat:$('#x_cat').value,label:$('#x_label').value.trim(),amount:n,date:$('#x_date').value,emp:$('#x_emp').value,note:$('#x_note').value.trim(),month:S.cur};
+      if(v)Object.assign(S.expenses.find(x=>x.id===v),rec);else S.expenses.push(Object.assign({id:uid()},rec));
+      save();closeSheet();render();toast('تم حفظ المصروف ✓');break}
+    case 'delexp':if(confirm('حذف هذا المصروف؟')){S.expenses=S.expenses.filter(x=>x.id!==v);save();closeSheet();render()}break;
+    case 'copyexp':{const src=S.expenses.filter(x=>x.month===addM(S.cur,-1));const have=new Set(S.expenses.filter(x=>x.month===S.cur).map(x=>[x.cat,x.label,x.amount,x.emp].join('|')));
+      const add=src.filter(x=>!have.has([x.cat,x.label,x.amount,x.emp].join('|')));
+      if(!add.length){toast('لا جديد للنسخ');break}
+      if(!confirm(`نسخ ${add.length} بند من مصروفات ${mlabel(addM(S.cur,-1))} إلى ${mlabel(S.cur)}؟ (يمكنك تعديل المبالغ بعد النسخ)`))break;
+      add.forEach(x=>S.expenses.push({id:uid(),month:S.cur,cat:x.cat,label:x.label,amount:x.amount,date:'',emp:x.emp,note:x.note}));
+      save();render();toast('تم النسخ ✓');break}
+    case 'addcat':{const n=($('#new_cat').value||'').trim();if(!n)break;if(!S.expCats.includes(n))S.expCats.push(n);save();render();break}
+    case 'delcat':if(confirm('حذف هذا التصنيف؟')){S.expCats=S.expCats.filter(c=>c!==v);save();render()}break;
     case 'csv':csv();break;
     case 'pickLogo':$('#logo_in').click();break;
     case 'rmLogo':delete S.logo;save();render();break;
@@ -625,12 +674,17 @@ function buildXlsx(){
   const L=[H(['الكود','الاسم','الرقم','الموظف','اليوم','الباقة','السعر','حالة الخط','حالة الدفع','المدفوع','المتبقي','الرقم الأساسي','ملاحظات'])];
   subs.forEach(s=>{const c=cust(s.cid);L.push([c.id,c.name||'',c.phone||'',(emp(s.emp)||{}).name||'',s.day,(pkg(s.pkg)||{}).name||'',s.price,s.status,s.pay,s.paid,rem(s),s.main||'',s.notes||''])});
   const n=L.length;L.push([{v:'الإجمالي',s:3},'','','','','',{v:subs.filter(billable).reduce((a,s)=>a+(+s.price||0),0),s:6,f:`SUMIFS(G2:G${n},H2:H${n},"نشط")+SUMIFS(G2:G${n},H2:H${n},"جديد")`},'','',{v:st.paid,s:6,f:`SUM(J2:J${n})`},{v:st.out,s:6,f:`SUM(K2:K${n})`}]);
-  const E=[H(['الشهر','البند','الموظف','المبلغ'])];S.expenses.filter(x=>x.month===m).forEach(x=>E.push([mlabel(x.month),x.label||'',x.emp?(emp(x.emp)||{}).name:'عام',+x.amount||0]));
+  const E=[H(['الشهر','التاريخ','التصنيف','البند','يخص','المبلغ','ملاحظة'])];
+  const xl=S.expenses.filter(x=>x.month===m).sort((a,b)=>(a.date||'9').localeCompare(b.date||'9'));
+  xl.forEach(x=>E.push([mlabel(x.month),x.date?x.date.split('-').reverse().join('/'):'',x.cat,x.label||'',x.emp?(emp(x.emp)||{}).name:'عام',+x.amount||0,x.note||'']));
+  const en=E.length;E.push([{v:'إجمالي المصروفات',s:3},'','','','',{v:st.costs,s:6,f:`SUM(F2:F${en})`}]);
+  E.push([],[{v:'حسب التصنيف',s:3}],H(['التصنيف','','','','','المبلغ']));
+  const bc=expTotals(m);Object.keys(bc).sort((a,b)=>bc[b]-bc[a]).forEach(c=>E.push([c,'','','','',bc[c]]));
   const A=[H(['الشهر','الكود','الاسم','الرقم','الموظف','اليوم','السعر','حالة الخط','حالة الدفع','المدفوع','المتبقي'])];
   S.subs.slice().sort((a,b)=>b.month.localeCompare(a.month)).forEach(s=>{const c=cust(s.cid);A.push([mlabel(s.month),c.id,c.name||'',c.phone||'',(emp(s.emp)||{}).name||'',s.day,s.price,s.status,s.pay,s.paid,rem(s)])});
   return xlsxBytes([{name:'الملخص',rows:sum,widths:[34,14,14,14,14,14,12,14,14]},
     {name:'مشتركو '+mlabel(m).slice(0,18),rows:L,widths:[11,24,15,16,7,22,10,11,11,10,10,15,28],freeze:1,filter:`A1:M${n}`},
-    {name:'المصروفات',rows:E,widths:[16,26,16,12]},{name:'كل الأشهر',rows:A,widths:[16,11,24,15,16,7,10,11,11,10,10],freeze:1,filter:`A1:K${A.length}`}]);
+    {name:'المصروفات',rows:E,widths:[16,12,18,26,16,12,28]},{name:'كل الأشهر',rows:A,widths:[16,11,24,15,16,7,10,11,11,10,10],freeze:1,filter:`A1:K${A.length}`}]);
 }
 function exportXlsx(){download(`تقرير-${S.cur}.xlsx`,buildXlsx(),'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');toast('تم تجهيز ملف Excel ✓')}
 /* ======================= تقرير PDF (طباعة منسقة) ======================= */
@@ -654,7 +708,8 @@ function showReport(){
   <h4>يوم 1 مقابل يوم 16</h4><table><thead><tr><th>اليوم</th><th>المشتركون</th><th>المطلوب</th><th>المدفوع</th><th>المتبقي</th></tr></thead><tbody>
   ${[[1,st.d1],[16,st.d16]].map(([k,a])=>{const z=d(a);return row(['يوم '+k,z[0],fmt(z[1]),fmt(z[2]),fmt(z[3])])}).join('')}</tbody></table>
   <h4>حالة الدفع</h4><table><thead><tr>${payc.map(x=>`<th>${x[0]}</th>`).join('')}</tr></thead><tbody><tr>${payc.map(x=>`<td>${x[1]}</td>`).join('')}</tr></tbody></table>
-  ${exps.length?`<h4>المصروفات</h4><table><thead><tr><th>البند</th><th>الموظف</th><th>المبلغ</th></tr></thead><tbody>${exps.map(x=>row([esc(x.label||'—'),x.emp?esc((emp(x.emp)||{}).name):'عام',fmt(x.amount)])).join('')}</tbody></table>`:''}
+  ${exps.length?`<h4>المصروفات التفصيلية (${fmt(st.costs)})</h4><table><thead><tr><th>التصنيف</th><th>الإجمالي</th><th>النسبة</th></tr></thead><tbody>${Object.entries(expTotals(m)).sort((a,b)=>b[1]-a[1]).map(([c,v])=>row([esc(c),fmt(v),pct(st.costs?v/st.costs:0)])).join('')}</tbody></table>
+  <table style="margin-top:8px"><thead><tr><th>التاريخ</th><th>التصنيف</th><th>البند</th><th>يخص</th><th>المبلغ</th></tr></thead><tbody>${exps.slice().sort((a,b)=>(a.date||'9').localeCompare(b.date||'9')).map(x=>row([x.date?x.date.split('-').reverse().join('/'):'—',esc(x.cat),esc(x.label||'—')+(x.note?' <small>('+esc(x.note)+')</small>':''),x.emp?esc((emp(x.emp)||{}).name):'عام',fmt(x.amount)])).join('')}</tbody></table>`:''}
   <h4>المتأخرات والمتبقي (${unp.length})</h4>${unp.length?`<table><thead><tr><th>#</th><th>الاسم</th><th>الرقم</th><th>الموظف</th><th>يوم</th><th>الحالة</th><th>المتبقي</th></tr></thead><tbody>${unp.map((s,i)=>{const c=cust(s.cid);return row([i+1,esc(c.name||'—'),esc(c.phone||'—'),esc((emp(s.emp)||{}).name||''),s.day,s.pay,fmt(rem(s))])}).join('')}</tbody></table>`:'<div class="muted">لا توجد متأخرات 🎉</div>'}
   </div>`;
   el.style.display='block';el.scrollTop=0;
