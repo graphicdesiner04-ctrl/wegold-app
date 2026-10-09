@@ -247,6 +247,12 @@ function loginScreen(){
   <div class="field" style="text-align:right"><label>اسم المستخدم</label><input id="lg_user" autocomplete="username" autocapitalize="none" style="letter-spacing:0;font-size:18px;text-align:center"></div>
   <div class="field" style="text-align:right"><label>كلمة السر</label><input id="lg_pass" type="password" autocomplete="current-password" style="letter-spacing:0;font-size:18px;text-align:center"></div>
   <button class="btn gold block" data-a="login" id="lg_btn">دخول</button><p class="muted" id="lg_msg" style="min-height:22px"></p></div>`}
+async function openSeed(bits){
+  const E=SEED_ENC;
+  const key=await crypto.subtle.importKey('raw',bits.slice(0,32),'AES-GCM',false,['decrypt']);
+  const pt=await crypto.subtle.decrypt({name:'AES-GCM',iv:b64d(E.iv)},key,b64d(E.ct));
+  return JSON.parse(new TextDecoder().decode(pt));
+}
 async function doLogin(){
   const u=($('#lg_user').value||'').trim().toLowerCase(),p=$('#lg_pass').value||'',msg=$('#lg_msg'),btn=$('#lg_btn');
   if(!u||!p){msg.textContent='أدخل اسم المستخدم وكلمة السر';return}
@@ -255,15 +261,22 @@ async function doLogin(){
     if(!S){
       const E=SEED_ENC;if(u!==E.user.toLowerCase())throw 0;
       const bits=await kdf(p,E.salt,E.iter);
-      const key=await crypto.subtle.importKey('raw',bits.slice(0,32),'AES-GCM',false,['decrypt']);
-      const pt=await crypto.subtle.decrypt({name:'AES-GCM',iv:b64d(E.iv)},key,b64d(E.ct));
-      const d=JSON.parse(new TextDecoder().decode(pt));
-      d.auth={user:E.user,salt:E.salt,iter:E.iter,ver:b64e(bits.slice(32,64))};
+      const d=await openSeed(bits);
+      d.auth={user:E.user,salt:E.salt,iter:E.iter,ver:b64e(bits.slice(32,64)),dv:E.ver||''};
       S=d;save();UI.unlocked=true;render();return;
     }
     const a=S.auth;if(u!==a.user.toLowerCase())throw 0;
     const bits=await kdf(p,a.salt,a.iter);if(b64e(bits.slice(32,64))!==a.ver)throw 0;
-    UI.unlocked=true;render();
+    UI.unlocked=true;
+    if(SEED_ENC&&(a.dv||'')!==(SEED_ENC.ver||'')){
+      try{
+        const d=await openSeed(bits);
+        if(confirm('تتوفر نسخة أحدث وأصح من بياناتك الأساسية.\nالتحديث يستبدل البيانات الموجودة على هذا الجهاز (أي تعديلات أدخلتها هنا ستُمسح).\nهل تريد التحديث؟')){
+          d.auth=Object.assign({},a,{dv:SEED_ENC.ver||''});S=d;save();toast('تم تحديث البيانات ✓');
+        }
+      }catch(e){}
+    }
+    render();
   }catch(e){btn.disabled=false;msg.textContent='❌ اسم المستخدم أو كلمة السر غير صحيحة';const x=$('#lg_pass');if(x)x.value=''}
 }
 function hpin(p){let h=5381;const t='wg|'+p;for(let i=0;i<t.length;i++)h=((h<<5)+h+t.charCodeAt(i))>>>0;return String(h)}
