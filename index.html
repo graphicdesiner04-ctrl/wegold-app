@@ -216,7 +216,8 @@ function stats(m,empId){
   const exp=b.reduce((a,s)=>a+(+s.price||0),0), paid=b.reduce((a,s)=>a+(+s.paid||0),0), out=b.reduce((a,s)=>a+rem(s),0);
   const costs=S.expenses.filter(e=>e.month===m&&(empId?e.emp===empId:true)).reduce((a,e)=>a+(+e.amount||0),0);
   const sharedCosts=empId?0:0;
-  return {total:list.length,active:list.filter(s=>s.status==='نشط').length,fresh:list.filter(s=>s.status==='جديد').length,
+  const lines=new Set(b.map(s=>s.main).filter(Boolean)).size;
+  return {lines,total:list.length,active:list.filter(s=>s.status==='نشط').length,fresh:list.filter(s=>s.status==='جديد').length,
     stopped:list.filter(s=>['متوقف','منتهي','خرج','مؤجل'].includes(s.status)).length,bill:b.length,exp,paid,out,costs,profit:paid-costs,
     rate:exp?paid/exp:0,d1:b.filter(s=>s.day===1),d16:b.filter(s=>s.day===16)};
 }
@@ -226,14 +227,14 @@ function render(){
   if(!S||(S.auth&&!UI.unlocked)){app.innerHTML=loginScreen();return}
   if(S.pin&&!UI.unlocked){app.innerHTML=lockScreen();return}
   if(!S.onboarded&&!S.employees.length){app.innerHTML=onboard();return}
-  const tabs=[['home','🏠','الرئيسية'],['lines','📋','الخطوط'],['pay','💰','المدفوعات'],['profit','📊','الأرباح'],['set','⚙️','الإعدادات']];
+  const tabs=[['home','🏠','الرئيسية'],['lines','📋','المشتركون'],['pay','💰','المدفوعات'],['profit','📊','الأرباح'],['set','⚙️','الإعدادات']];
   app.innerHTML=`
   <header class="top"><div class="row">
     <div class="brandrow">${S.logo?`<img class="logo" src="${S.logo}" alt="">`:''}<div class="brand">${esc(S.company||'إدارة الخطوط')}<small>نظام إدارة الاشتراكات</small></div></div>
     <div class="monthbar"><button data-a="mprev" aria-label="الشهر السابق">›</button><div class="m" data-a="mpick">${mlabel(S.cur)}<small>اضغط لاختيار شهر</small></div><button data-a="mnext" aria-label="الشهر التالي">‹</button></div>
   </div></header>
   <main>${UI.tab==='home'?home():UI.tab==='lines'?lines():UI.tab==='pay'?payments():UI.tab==='profit'?profit():settings()}</main>
-  ${UI.tab==='lines'?'<button class="fab" data-a="add" aria-label="إضافة خط">+</button>':''}
+  ${UI.tab==='lines'?'<button class="fab" data-a="add" aria-label="إضافة مشترك">+</button>':''}
   <nav class="tabs">${tabs.map(t=>`<button class="${UI.tab===t[0]?'on':''}" data-a="tab" data-v="${t[0]}"><span>${t[1]}</span>${t[2]}</button>`).join('')}</nav>`;
 }
 function b64e(u){let s='';for(let i=0;i<u.length;i++)s+=String.fromCharCode(u[i]);return btoa(s)}
@@ -283,9 +284,9 @@ function home(){
   const bn=backupBanner();
   if(!subs.length){
     const prev=subsOf(addM(m,-1)).filter(billable).length;
-    return bn+`<div class="card empty"><div class="big">🗓️</div><b>لا توجد خطوط في ${mlabel(m)}</b><p class="muted">${prev?`يوجد ${prev} خط نشط في الشهر السابق يمكن نقلهم بضغطة واحدة`:'ابدأ بإضافة أول خط'}</p>
+    return bn+`<div class="card empty"><div class="big">🗓️</div><b>لا يوجد مشتركون في ${mlabel(m)}</b><p class="muted">${prev?`يوجد ${prev} مشترك نشط في الشهر السابق يمكن نقلهم بضغطة واحدة`:'ابدأ بإضافة أول خط'}</p>
     ${prev?'<button class="btn gold block" data-a="newmonth">🔁 ابدأ الشهر من الشهر السابق</button><div style="height:8px"></div>':''}
-    <button class="btn ${prev?'ghost':'gold'} block" data-a="add">➕ إضافة خط</button></div>`;
+    <button class="btn ${prev?'ghost':'gold'} block" data-a="add">➕ إضافة مشترك</button></div>`;
   }
   const dm=dupMap(m); const review=subs.filter(s=>flagsOf(s,dm).length).length;
   const unp=subs.filter(s=>billable(s)&&['لم يتم','متأخر','معلّق'].includes(s.pay)).length;
@@ -294,10 +295,11 @@ function home(){
   const D1=d(st.d1),D16=d(st.d16);
   return bn+`
   <div class="grid g2 g4d">
-    <div class="card kpi"><div class="v">${fmt(st.bill)}</div><div class="l">عدد الخطوط</div><small>جدد ${st.fresh} · متوقفون ${st.stopped}</small></div>
+    <div class="card kpi"><div class="v">${fmt(st.lines)}</div><div class="l">عدد الخطوط</div><small>الأرقام الأساسية</small></div>
+    <div class="card kpi"><div class="v">${fmt(st.bill)}</div><div class="l">عدد المشتركين</div><small>جدد ${st.fresh} · متوقفون ${st.stopped}</small></div>
     <div class="card kpi"><div class="v">${fmt(st.exp)}</div><div class="l">المطلوب هذا الشهر</div></div>
     <div class="card kpi green"><div class="v">${fmt(st.paid)}</div><div class="l">المدفوع</div></div>
-    <div class="card kpi red"><div class="v">${fmt(st.out)}</div><div class="l">المتبقي</div></div>
+    <div class="card kpi red" style="grid-column:span 2"><div class="v">${fmt(st.out)}</div><div class="l">المتبقي</div></div>
   </div>
   <div class="card" style="margin-top:10px"><div class="big-rate"><div class="pct">${pct(st.rate)}</div><div style="flex:1"><b>نسبة التحصيل</b><div class="bar"><i style="width:${Math.min(100,st.rate*100)}%"></i></div></div></div></div>
   <div class="grid g2" style="margin-top:10px">
@@ -305,13 +307,13 @@ function home(){
     <div class="card kpi" data-a="goreview" style="cursor:pointer"><div class="v" style="color:${review?'#c2570c':'#0f9d6a'}">${review||'✓'}</div><div class="l">تحتاج مراجعة</div></div>
   </div>
   <h2>حسب الموظف</h2>
-  <div class="card"><table class="t"><tr><th>الموظف</th><th>الخطوط</th><th>المدفوع</th><th>المتبقي</th><th>التحصيل</th><th>الربح</th></tr>
-  ${S.employees.map(e=>{const x=stats(m,e.id);return `<tr><td><b>${esc(e.name)}</b></td><td class="num">${x.bill}</td><td class="num">${fmt(x.paid)}</td><td class="num" style="color:${x.out?'var(--red)':'inherit'}">${fmt(x.out)}</td><td class="num">${pct(x.rate)}</td><td class="num"><b>${fmt(x.profit)}</b></td></tr>`}).join('')}
+  <div class="card"><table class="t"><tr><th>الموظف</th><th>الخطوط</th><th>المشتركون</th><th>المدفوع</th><th>المتبقي</th><th>التحصيل</th><th>الربح</th></tr>
+  ${S.employees.map(e=>{const x=stats(m,e.id);return `<tr><td><b>${esc(e.name)}</b></td><td class="num">${x.lines}</td><td class="num">${x.bill}</td><td class="num">${fmt(x.paid)}</td><td class="num" style="color:${x.out?'var(--red)':'inherit'}">${fmt(x.out)}</td><td class="num">${pct(x.rate)}</td><td class="num"><b>${fmt(x.profit)}</b></td></tr>`}).join('')}
   </table></div>
   <h2>مقارنة يوم 1 ويوم 16</h2>
   <div class="grid g2">
     ${[[1,D1],[16,D16]].map(([dd,x])=>`<div class="card"><div class="row2"><b>يوم ${dd}</b><span class="muted">${renewDate(m,dd)}</span></div>
-      <div style="font-size:26px;font-weight:800;color:var(--navy);margin:6px 0">${x.n} <span class="muted" style="font-size:13px;font-weight:500">خط</span></div>
+      <div style="font-size:26px;font-weight:800;color:var(--navy);margin:6px 0">${x.n} <span class="muted" style="font-size:13px;font-weight:500">مشترك</span></div>
       <div class="muted">المطلوب <b class="num">${fmt(x.exp)}</b></div><div class="muted">المدفوع <b class="num" style="color:var(--green)">${fmt(x.paid)}</b></div><div class="muted">المتبقي <b class="num" style="color:var(--red)">${fmt(x.out)}</b></div>
       <div class="bar"><i style="width:${x.exp?Math.min(100,x.paid/x.exp*100):0}%"></i></div></div>`).join('')}
   </div>
@@ -358,7 +360,7 @@ function lines(){
   const chips=[['all','الكل'],['unpaid','غير مدفوع'],['partial','جزئي'],['d1','يوم 1'],['d16','يوم 16'],['new','جدد'],['review','تحتاج مراجعة'],['off','متوقفون']];
   return `<div class="search"><input id="q" type="search" placeholder="🔍 ابحث بالاسم أو الرقم أو الكود" value="${esc(UI.q)}"><select id="empf"><option value="">كل الموظفين</option>${S.employees.map(e=>`<option value="${e.id}" ${UI.emp===e.id?'selected':''}>${esc(e.name)}</option>`).join('')}</select></div>
   <div class="chips">${chips.map(c=>`<button class="fchip ${UI.filter===c[0]?'on':''}" data-a="filter" data-v="${c[0]}">${c[1]}</button>`).join('')}</div>
-  <div class="muted" style="margin:0 4px 8px">${list.length} خط${list.length?` · المطلوب ${fmt(list.filter(billable).reduce((a,s)=>a+(+s.price||0),0))}`:''}</div>
+  <div class="muted" style="margin:0 4px 8px">${list.length} مشترك${list.length?` · المطلوب ${fmt(list.filter(billable).reduce((a,s)=>a+(+s.price||0),0))}`:''}</div>
   ${list.length?list.slice(0,UI.limit).map(s=>itemHTML(s,dm)).join('')+(list.length>UI.limit?`<button class="btn ghost block" data-a="more">عرض المزيد (${list.length-UI.limit})</button>`:''):`<div class="empty"><div class="big">🔎</div>لا توجد نتائج</div>`}`;
 }
 function payments(){
@@ -420,17 +422,17 @@ function editSheet(id,preset){
   const s=id?S.subs.find(x=>x.id===id):Object.assign({id:'',cid:'',month:S.cur,emp:UI.emp||(S.employees[0]||{}).id||'',day:1,pkg:'',price:0,status:'جديد',pay:'لم يتم',paid:0,main:'',notes:''},preset||{});
   const c=s.cid?cust(s.cid):{name:'',phone:''};
   const hist=s.cid?S.subs.filter(x=>x.cid===s.cid).sort((a,b)=>b.month.localeCompare(a.month)):[];
-  sheet(`<h3>${id?'تعديل خط':'إضافة خط'} <span class="muted" style="font-size:13px">${mlabel(s.month)}</span></h3>
+  sheet(`<h3>${id?'تعديل مشترك':'إضافة مشترك'} <span class="muted" style="font-size:13px">${mlabel(s.month)}</span></h3>
   <div class="two"><div class="field"><label>الاسم</label><input id="f_name" value="${esc(c.name)}" placeholder="اختياري"></div>
-  <div class="field"><label>رقم الهاتف</label><input id="f_phone" inputmode="tel" value="${esc(c.phone)}" placeholder="01xxxxxxxxx"></div></div>
+  <div class="field"><label>رقم المشترك</label><input id="f_phone" inputmode="tel" value="${esc(c.phone)}" placeholder="01xxxxxxxxx"></div></div>
   <div class="two"><div class="field"><label>الموظف</label><select id="f_emp">${S.employees.map(e=>`<option value="${e.id}" ${s.emp===e.id?'selected':''}>${esc(e.name)}</option>`).join('')}</select></div>
   <div class="field"><label>يوم التجديد</label><select id="f_day"><option value="1" ${s.day===1?'selected':''}>يوم 1</option><option value="16" ${s.day===16?'selected':''}>يوم 16</option></select></div></div>
   <div class="field"><label>الباقة</label><select id="f_pkg"><option value="">— اختر —</option>${S.packages.filter(p=>p.active||p.id===s.pkg).map(p=>`<option value="${p.id}" ${s.pkg===p.id?'selected':''}>${esc(p.name)} — ${p.gb} جيجا / ${p.min} د — ${fmt(p.price)}</option>`).join('')}</select></div>
   <div class="two"><div class="field"><label>السعر</label><input id="f_price" type="number" inputmode="decimal" value="${s.price||''}"></div>
   <div class="field"><label>المدفوع</label><input id="f_paid" type="number" inputmode="decimal" value="${s.paid||''}"></div></div>
-  <div class="two"><div class="field"><label>حالة الخط</label><select id="f_st">${STATUSES.map(x=>`<option ${s.status===x?'selected':''}>${x}</option>`).join('')}</select></div>
+  <div class="two"><div class="field"><label>حالة المشترك</label><select id="f_st">${STATUSES.map(x=>`<option ${s.status===x?'selected':''}>${x}</option>`).join('')}</select></div>
   <div class="field"><label>حالة الدفع</label><select id="f_pay">${PAYS.map(x=>`<option ${s.pay===x?'selected':''}>${x}</option>`).join('')}</select></div></div>
-  <div class="field"><label>الرقم الأساسي (الخط الرئيسي)</label><input id="f_main" inputmode="tel" value="${esc(s.main)}"></div>
+  <div class="field"><label>الرقم الأساسي (الخط الذي يتبعه)</label><input id="f_main" inputmode="tel" list="mainlist" value="${esc(s.main)}"><datalist id="mainlist">${[...new Set(S.subs.map(x=>x.main).filter(Boolean))].map(v=>`<option value="${v}">`).join('')}</datalist></div>
   <div class="field"><label>ملاحظات</label><textarea id="f_notes" rows="2">${esc(s.notes)}</textarea></div>
   ${hist.length>1?`<div class="field"><label>سجل هذا المشترك</label><div class="hist">${hist.map(h=>`<div><span>${mlabel(h.month)}</span><span>${esc((emp(h.emp)||{}).name||'')} · ${fmt(h.price)}</span><span>${h.pay}</span></div>`).join('')}</div></div>`:''}
   <div class="actions"><button class="btn gold" data-a="saveedit" data-v="${s.id}">حفظ</button>${id?`<button class="btn red" data-a="deledit" data-v="${s.id}" style="flex:.5">حذف</button>`:''}<button class="btn ghost" data-a="close" style="flex:.6">إلغاء</button></div>`);
@@ -462,11 +464,11 @@ function monthPicker(){
 }
 function newMonth(){
   const m=S.cur, prev=addM(m,-1), src=subsOf(prev).filter(billable);
-  if(!src.length){toast('لا توجد خطوط نشطة في الشهر السابق');return}
+  if(!src.length){toast('لا يوجد مشتركون نشطون في الشهر السابق');return}
   const have=new Set(subsOf(m).map(s=>s.cid));
   const add=src.filter(s=>!have.has(s.cid));
   const stopped=subsOf(prev).length-src.length;
-  if(!confirm(`سيتم نقل ${add.length} خط نشط من ${mlabel(prev)} إلى ${mlabel(m)} بحالة «لم يتم الدفع».\n${stopped?`(${stopped} خط متوقف/منتهي لن يُنقل ويبقى في السجل)\n`:''}متابعة؟`))return;
+  if(!confirm(`سيتم نقل ${add.length} مشترك نشط من ${mlabel(prev)} إلى ${mlabel(m)} بحالة «لم يتم الدفع».\n${stopped?`(${stopped} مشترك متوقف/منتهي لن يُنقل ويبقى في السجل)\n`:''}متابعة؟`))return;
   add.forEach(s=>{const p=pkg(s.pkg);S.subs.push({id:uid(),cid:s.cid,month:m,emp:s.emp,day:s.day,pkg:s.pkg,price:p?p.price:s.price,status:'نشط',pay:'لم يتم',paid:0,main:s.main,notes:s.notes})});
   save();render();toast(`تم تجهيز ${mlabel(m)} ✓`);
 }
@@ -474,7 +476,7 @@ function csv(){
   const rows=[['الشهر','الكود','الاسم','الرقم','الموظف','اليوم','الباقة','السعر','حالة الخط','حالة الدفع','المدفوع','المتبقي','الرقم الأساسي','ملاحظات']];
   subsOf(S.cur).forEach(s=>{const c=cust(s.cid);rows.push([mlabel(s.month),c.id,c.name,c.phone,(emp(s.emp)||{}).name||'',s.day,(pkg(s.pkg)||{}).name||'',s.price,s.status,s.pay,s.paid,rem(s),s.main,s.notes])});
   const t='﻿'+rows.map(r=>r.map(x=>'"'+String(x??'').replace(/"/g,'""')+'"').join(',')).join('\r\n');
-  download(`خطوط-${S.cur}.csv`,t,'text/csv;charset=utf-8');
+  download(`مشتركون-${S.cur}.csv`,t,'text/csv;charset=utf-8');
 }
 function download(name,text,type){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([text],{type}));a.download=name;document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},500)}
 /* ======================= الأحداث ======================= */
@@ -492,7 +494,7 @@ document.addEventListener('click',e=>{
     case 'add':editSheet();break;
     case 'edit':editSheet(v);break;
     case 'saveedit':saveEdit(v);break;
-    case 'deledit':if(confirm('حذف هذا الخط من هذا الشهر؟ (بقية الأشهر لا تتأثر)')){S.subs=S.subs.filter(x=>x.id!==v);save();closeSheet();render();toast('تم الحذف')}break;
+    case 'deledit':if(confirm('حذف هذا المشترك من هذا الشهر؟ (بقية الأشهر لا تتأثر)')){S.subs=S.subs.filter(x=>x.id!==v);save();closeSheet();render();toast('تم الحذف')}break;
     case 'filter':UI.filter=v;UI.limit=80;render();break;
     case 'more':UI.limit+=100;render();break;
     case 'payseg':UI.payseg=v;render();break;
@@ -539,7 +541,7 @@ document.addEventListener('change',e=>{
   if(t.dataset.emp){const e2=emp(t.dataset.emp);e2.name=t.value.trim()||e2.name;save();return}
   const row=t.closest('[data-pk]');
   if(row){const p=pkg(row.dataset.pk),f=t.dataset.f;if(f==='name')p.name=t.value;else{const old=p[f];p[f]=+t.value||0;
-    if(f==='price'&&old!==p[f]){const n=subsOf(S.cur).filter(s=>s.pkg===p.id&&s.pay!=='تم').length;if(n&&confirm(`تطبيق السعر الجديد على ${n} خط في ${mlabel(S.cur)} (غير المدفوعين)؟`))subsOf(S.cur).filter(s=>s.pkg===p.id&&s.pay!=='تم').forEach(s=>s.price=p.price)}}
+    if(f==='price'&&old!==p[f]){const n=subsOf(S.cur).filter(s=>s.pkg===p.id&&s.pay!=='تم').length;if(n&&confirm(`تطبيق السعر الجديد على ${n} مشترك في ${mlabel(S.cur)} (غير المدفوعين)؟`))subsOf(S.cur).filter(s=>s.pkg===p.id&&s.pay!=='تم').forEach(s=>s.price=p.price)}}
     save();return}
   if(t.id==='logo_in'&&t.files[0]){const fr=new FileReader();fr.onload=()=>{const im=new Image();im.onload=()=>{const k=Math.min(1,320/Math.max(im.width,im.height));const c=document.createElement('canvas');c.width=Math.round(im.width*k);c.height=Math.round(im.height*k);c.getContext('2d').drawImage(im,0,0,c.width,c.height);S.logo=c.toDataURL('image/png');save();render();toast('تم رفع الشعار ✓')};im.onerror=()=>toast('ملف الصورة غير صالح');im.src=fr.result};fr.readAsDataURL(t.files[0]);return}
   if(t.id==='rf'&&t.files[0]){const r=new FileReader();r.onload=()=>{try{const d=JSON.parse(r.result);if(!d.subs||!d.employees)throw 0;if(confirm('سيتم استبدال كل البيانات الحالية بالنسخة المختارة. متابعة؟')){d.auth=S.auth;S=d;save();render();toast('تم الاسترجاع ✓')}}catch(x){toast('ملف غير صالح')}};r.readAsText(t.files[0])}
@@ -584,12 +586,12 @@ function buildXlsx(){
   const H=a=>a.map(x=>({v:x,s:1}));
   const sum=[[{v:(S.company||'إدارة الخطوط')+' — ملخص '+mlabel(m),s:5}],[],
     H(['البند','هذا الشهر','الشهر السابق']),
-    ['عدد الخطوط (نشط + جديد)',st.bill,pv.bill],['المشتركون الجدد',st.fresh,pv.fresh],['المتوقفون / المنتهون',st.stopped,pv.stopped],
+    ['عدد الخطوط (الأرقام الأساسية)',st.lines,pv.lines],['عدد المشتركين (نشط + جديد)',st.bill,pv.bill],['المشتركون الجدد',st.fresh,pv.fresh],['المتوقفون / المنتهون',st.stopped,pv.stopped],
     ['المطلوب',st.exp,pv.exp],['المدفوع',st.paid,pv.paid],['المتبقي',st.out,pv.out],['المصروفات',st.costs,pv.costs],['صافي الربح',{v:st.profit,s:6},{v:pv.profit,s:6}],
     ['نسبة التحصيل',{v:st.rate,s:4},{v:pv.rate,s:4}],[],
-    [{v:'حسب الموظف',s:3}],H(['الموظف','الخطوط','المطلوب','المدفوع','المتبقي','التحصيل','المصروفات','الربح'])];
-  S.employees.forEach(e=>{const x=stats(m,e.id);sum.push([e.name,x.bill,x.exp,x.paid,x.out,{v:x.rate,s:4},x.costs,x.profit])});
-  sum.push([],[{v:'حسب يوم التجديد',s:3}],H(['اليوم','الخطوط','المطلوب','المدفوع','المتبقي']));
+    [{v:'حسب الموظف',s:3}],H(['الموظف','الخطوط','المشتركون','المطلوب','المدفوع','المتبقي','التحصيل','المصروفات','الربح'])];
+  S.employees.forEach(e=>{const x=stats(m,e.id);sum.push([e.name,x.lines,x.bill,x.exp,x.paid,x.out,{v:x.rate,s:4},x.costs,x.profit])});
+  sum.push([],[{v:'حسب يوم التجديد',s:3}],H(['اليوم','المشتركون','المطلوب','المدفوع','المتبقي']));
   [[1,st.d1],[16,st.d16]].forEach(([d,a])=>sum.push(['يوم '+d,a.length,a.reduce((x,s)=>x+(+s.price||0),0),a.reduce((x,s)=>x+(+s.paid||0),0),a.reduce((x,s)=>x+rem(s),0)]));
   const L=[H(['الكود','الاسم','الرقم','الموظف','اليوم','الباقة','السعر','حالة الخط','حالة الدفع','المدفوع','المتبقي','الرقم الأساسي','ملاحظات'])];
   subs.forEach(s=>{const c=cust(s.cid);L.push([c.id,c.name||'',c.phone||'',(emp(s.emp)||{}).name||'',s.day,(pkg(s.pkg)||{}).name||'',s.price,s.status,s.pay,s.paid,rem(s),s.main||'',s.notes||''])});
@@ -597,8 +599,8 @@ function buildXlsx(){
   const E=[H(['الشهر','البند','الموظف','المبلغ'])];S.expenses.filter(x=>x.month===m).forEach(x=>E.push([mlabel(x.month),x.label||'',x.emp?(emp(x.emp)||{}).name:'عام',+x.amount||0]));
   const A=[H(['الشهر','الكود','الاسم','الرقم','الموظف','اليوم','السعر','حالة الخط','حالة الدفع','المدفوع','المتبقي'])];
   S.subs.slice().sort((a,b)=>b.month.localeCompare(a.month)).forEach(s=>{const c=cust(s.cid);A.push([mlabel(s.month),c.id,c.name||'',c.phone||'',(emp(s.emp)||{}).name||'',s.day,s.price,s.status,s.pay,s.paid,rem(s)])});
-  return xlsxBytes([{name:'الملخص',rows:sum,widths:[30,14,14,14,14,12,14,14]},
-    {name:'خطوط '+mlabel(m).slice(0,20),rows:L,widths:[11,24,15,16,7,22,10,11,11,10,10,15,28],freeze:1,filter:`A1:M${n}`},
+  return xlsxBytes([{name:'الملخص',rows:sum,widths:[34,14,14,14,14,14,12,14,14]},
+    {name:'مشتركو '+mlabel(m).slice(0,18),rows:L,widths:[11,24,15,16,7,22,10,11,11,10,10,15,28],freeze:1,filter:`A1:M${n}`},
     {name:'المصروفات',rows:E,widths:[16,26,16,12]},{name:'كل الأشهر',rows:A,widths:[16,11,24,15,16,7,10,11,11,10,10],freeze:1,filter:`A1:K${A.length}`}]);
 }
 function exportXlsx(){download(`تقرير-${S.cur}.xlsx`,buildXlsx(),'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');toast('تم تجهيز ملف Excel ✓')}
@@ -615,12 +617,12 @@ function showReport(){
   el.innerHTML=`<div class="bar2"><button class="btn gold" data-a="printnow">🖨️ طباعة / حفظ PDF</button><button class="btn ghost" data-a="closereport">إغلاق</button></div>
   <div class="paper">${S.logo?`<img src="${S.logo}" style="height:54px;float:left;margin-right:12px">`:''}<h1>${esc(S.company||'إدارة الخطوط')} — تقرير ${mlabel(m)}</h1>
   <div class="meta">تاريخ التقرير: ${new Date().toLocaleDateString('ar-EG')} · تجديد يوم 1: ${renewDate(m,1)} · تجديد يوم 16: ${renewDate(m,16)}</div>
-  <div class="kp"><div><b>${fmt(st.bill)}</b>الخطوط${dl(st.bill,pv.bill)}</div><div><b>${fmt(st.exp)}</b>المطلوب${dl(st.exp,pv.exp)}</div><div><b style="color:#0f9d6a">${fmt(st.paid)}</b>المدفوع${dl(st.paid,pv.paid)}</div><div><b style="color:#d6334a">${fmt(st.out)}</b>المتبقي</div></div>
-  <div class="kp" style="margin-top:8px"><div><b>${pct(st.rate)}</b>نسبة التحصيل</div><div><b>${fmt(st.costs)}</b>المصروفات</div><div><b style="color:#a8830f">${fmt(st.profit)}</b>صافي الربح${dl(st.profit,pv.profit)}</div><div><b>${st.fresh}</b>مشتركون جدد</div></div>
-  <h4>حسب الموظف</h4><table><thead><tr><th>الموظف</th><th>الخطوط</th><th>المطلوب</th><th>المدفوع</th><th>المتبقي</th><th>التحصيل</th><th>المصروفات</th><th>الربح</th></tr></thead><tbody>
-  ${S.employees.map(e=>{const x=stats(m,e.id);return row([`<b>${esc(e.name)}</b>`,x.bill,fmt(x.exp),fmt(x.paid),fmt(x.out),pct(x.rate),fmt(x.costs),`<b>${fmt(x.profit)}</b>`])}).join('')}</tbody>
-  <tfoot><tr><td>الإجمالي</td><td>${st.bill}</td><td>${fmt(st.exp)}</td><td>${fmt(st.paid)}</td><td>${fmt(st.out)}</td><td>${pct(st.rate)}</td><td>${fmt(st.costs)}</td><td>${fmt(st.profit)}</td></tr></tfoot></table>
-  <h4>يوم 1 مقابل يوم 16</h4><table><thead><tr><th>اليوم</th><th>الخطوط</th><th>المطلوب</th><th>المدفوع</th><th>المتبقي</th></tr></thead><tbody>
+  <div class="kp"><div><b>${fmt(st.lines)}</b>عدد الخطوط</div><div><b>${fmt(st.bill)}</b>عدد المشتركين${dl(st.bill,pv.bill)}</div><div><b>${fmt(st.exp)}</b>المطلوب${dl(st.exp,pv.exp)}</div><div><b style="color:#0f9d6a">${fmt(st.paid)}</b>المدفوع${dl(st.paid,pv.paid)}</div></div>
+  <div class="kp" style="margin-top:8px"><div><b style="color:#d6334a">${fmt(st.out)}</b>المتبقي</div><div><b>${pct(st.rate)}</b>نسبة التحصيل</div><div><b>${fmt(st.costs)}</b>المصروفات</div><div><b style="color:#a8830f">${fmt(st.profit)}</b>صافي الربح${dl(st.profit,pv.profit)}</div></div>
+  <h4>حسب الموظف</h4><table><thead><tr><th>الموظف</th><th>الخطوط</th><th>المشتركون</th><th>المطلوب</th><th>المدفوع</th><th>المتبقي</th><th>التحصيل</th><th>المصروفات</th><th>الربح</th></tr></thead><tbody>
+  ${S.employees.map(e=>{const x=stats(m,e.id);return row([`<b>${esc(e.name)}</b>`,x.lines,x.bill,fmt(x.exp),fmt(x.paid),fmt(x.out),pct(x.rate),fmt(x.costs),`<b>${fmt(x.profit)}</b>`])}).join('')}</tbody>
+  <tfoot><tr><td>الإجمالي</td><td>${st.lines}</td><td>${st.bill}</td><td>${fmt(st.exp)}</td><td>${fmt(st.paid)}</td><td>${fmt(st.out)}</td><td>${pct(st.rate)}</td><td>${fmt(st.costs)}</td><td>${fmt(st.profit)}</td></tr></tfoot></table>
+  <h4>يوم 1 مقابل يوم 16</h4><table><thead><tr><th>اليوم</th><th>المشتركون</th><th>المطلوب</th><th>المدفوع</th><th>المتبقي</th></tr></thead><tbody>
   ${[[1,st.d1],[16,st.d16]].map(([k,a])=>{const z=d(a);return row(['يوم '+k,z[0],fmt(z[1]),fmt(z[2]),fmt(z[3])])}).join('')}</tbody></table>
   <h4>حالة الدفع</h4><table><thead><tr>${payc.map(x=>`<th>${x[0]}</th>`).join('')}</tr></thead><tbody><tr>${payc.map(x=>`<td>${x[1]}</td>`).join('')}</tr></tbody></table>
   ${exps.length?`<h4>المصروفات</h4><table><thead><tr><th>البند</th><th>الموظف</th><th>المبلغ</th></tr></thead><tbody>${exps.map(x=>row([esc(x.label||'—'),x.emp?esc((emp(x.emp)||{}).name):'عام',fmt(x.amount)])).join('')}</tbody></table>`:''}
