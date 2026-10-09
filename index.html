@@ -214,6 +214,18 @@ const plv=v=>'⁦'+(v<0?'−':'')+fmt(Math.abs(v))+'⁩';
 const pll=v=>v<0?'خسارة':'مكسب';
 const plc=v=>v<0?'#d6334a':'#0f9d6a';
 const plcell=v=>`<b style="color:${plc(v)}">${v<0?'🔻':'▲'} ${plv(v)}</b> <span class="muted" style="font-size:11px">${pll(v)}</span>`;
+function paidBox(m,compact){
+  const st=stats(m);
+  const who=subsOf(m).filter(s=>billable(s)&&(+s.paid||0)>0).length;
+  const all=S.subs.reduce((a,s)=>a+(+s.paid||0),0);
+  return `<div class="card" style="background:linear-gradient(135deg,#0f9d6a,#066b47);color:#fff;margin-bottom:12px"><div class="row2" style="align-items:flex-start">
+    <div><div style="opacity:.9;font-size:14px;font-weight:700">💰 إجمالي المدفوع من المشتركين — ${mlabel(m)}</div>
+    <div class="num" style="font-size:${compact?30:38}px;font-weight:800;line-height:1.25">${fmt(st.paid)}</div>
+    <div style="opacity:.9;font-size:13px">دفع ${who} مشترك من ${st.bill} · من إجمالي مطلوب ${fmt(st.exp)}</div></div>
+    <div style="text-align:left;font-size:12px;opacity:.95;white-space:nowrap">كل الأشهر<br><b class="num" style="font-size:18px">${fmt(all)}</b></div></div>
+    <div class="bar" style="background:rgba(255,255,255,.25);margin-top:10px"><i style="width:${Math.min(100,st.rate*100)}%;background:#fff"></i></div>
+    <div style="opacity:.9;font-size:12.5px;margin-top:4px">نسبة التحصيل ${pct(st.rate)} · المتبقي ${fmt(st.out)}</div></div>`;
+}
 function stats(m,empId){
   let list=subsOf(m); if(empId)list=list.filter(s=>s.emp===empId);
   const b=list.filter(billable);
@@ -322,7 +334,7 @@ function home(){
   const par=subs.filter(s=>billable(s)&&s.pay==='جزئي').length;
   const d=(arr)=>({n:arr.length,exp:arr.reduce((a,s)=>a+(+s.price||0),0),paid:arr.reduce((a,s)=>a+(+s.paid||0),0),out:arr.reduce((a,s)=>a+rem(s),0)});
   const D1=d(st.d1),D16=d(st.d16);
-  return bn+`
+  return bn+paidBox(m)+`
   <div class="grid g2 g4d">
     <div class="card kpi"><div class="v">${fmt(st.lines)}</div><div class="l">عدد الخطوط</div><small>الأرقام الأساسية</small></div>
     <div class="card kpi"><div class="v">${fmt(st.bill)}</div><div class="l">عدد المشتركين</div><small>جدد ${st.fresh} · متوقفون ${st.stopped}</small></div>
@@ -394,7 +406,7 @@ function lines(){
   const chips=[['all','الكل'],['unpaid','غير مدفوع'],['partial','جزئي'],['d1','يوم 1'],['d16','يوم 16'],['new','جدد'],['review','تحتاج مراجعة'],['off','متوقفون']];
   return `<div class="search"><input id="q" type="search" placeholder="🔍 ابحث بالاسم أو الرقم أو الكود" value="${esc(UI.q)}"><select id="empf"><option value="">كل الموظفين</option>${S.employees.map(e=>`<option value="${e.id}" ${UI.emp===e.id?'selected':''}>${esc(e.name)}</option>`).join('')}</select></div>
   <div class="chips">${chips.map(c=>`<button class="fchip ${UI.filter===c[0]?'on':''}" data-a="filter" data-v="${c[0]}">${c[1]}</button>`).join('')}</div>
-  <div class="muted" style="margin:0 4px 8px">${list.length} مشترك${list.length?` · المطلوب ${fmt(list.filter(billable).reduce((a,s)=>a+(+s.price||0),0))}`:''}</div>
+  <div class="muted" style="margin:0 4px 8px">${list.length} مشترك${list.length?` · المطلوب ${fmt(list.filter(billable).reduce((a,s)=>a+(+s.price||0),0))} · <b style="color:var(--green)">المدفوع ${fmt(list.filter(billable).reduce((a,s)=>a+(+s.paid||0),0))}</b>`:''}</div>
   ${list.length?list.slice(0,UI.limit).map(s=>itemHTML(s,dm)).join('')+(list.length>UI.limit?`<button class="btn ghost block" data-a="more">عرض المزيد (${list.length-UI.limit})</button>`:''):`<div class="empty"><div class="big">🔎</div>لا توجد نتائج</div>`}`;
 }
 function payments(){
@@ -403,7 +415,7 @@ function payments(){
   const un=all.filter(s=>['لم يتم','متأخر','معلّق'].includes(s.pay)), pa=all.filter(s=>s.pay==='جزئي'), ok=all.filter(s=>s.pay==='تم');
   const seg=UI.payseg; const list=seg==='unpaid'?un:seg==='partial'?pa:seg==='paid'?ok:all;
   const tot=list.reduce((a,s)=>a+rem(s),0);
-  return `<div class="seg">${[['unpaid',`غير مدفوع (${un.length})`],['partial',`جزئي (${pa.length})`],['paid',`تم (${ok.length})`],['all','الكل']].map(x=>`<button class="${seg===x[0]?'on':''}" data-a="payseg" data-v="${x[0]}">${x[1]}</button>`).join('')}</div>
+  return paidBox(m,true)+`<div class="seg">${[['unpaid',`غير مدفوع (${un.length})`],['partial',`جزئي (${pa.length})`],['paid',`تم (${ok.length})`],['all','الكل']].map(x=>`<button class="${seg===x[0]?'on':''}" data-a="payseg" data-v="${x[0]}">${x[1]}</button>`).join('')}</div>
   <div class="card row2" style="margin-bottom:10px"><span>إجمالي المتبقي في هذه القائمة</span><b class="num" style="color:var(--red);font-size:20px">${fmt(tot)}</b></div>
   ${list.length?list.slice(0,150).map(s=>{const c=cust(s.cid);return `<div class="card" style="margin-bottom:8px">
     <div class="row2" data-a="edit" data-v="${s.id}" style="cursor:pointer"><div><b>${esc(c.name||'بدون اسم')}</b><div class="muted num">${esc(c.phone||'—')} · ${esc((emp(s.emp)||{}).name||'')}</div></div><div style="text-align:left">${payChip(s)}<div class="num"><b>${fmt(s.price)}</b>${rem(s)?` <span style="color:var(--red);font-size:13px">متبقي ${fmt(rem(s))}</span>`:''}</div></div></div>
